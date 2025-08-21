@@ -19,6 +19,8 @@ services:
       retries: 3
     networks:
       - app-network
+    extra_hosts:
+      - "192.168.10.32:192.168.10.32"
 
 networks:
   app-network:
