@@ -14,7 +14,7 @@ RUN npm ci
 COPY . .
 
 # Create build arguments for environment variables
-ARG VITE_OLLAMA_BASE=http://localhost/ollama/v1
+ARG VITE_OLLAMA_BASE=http://192.168.10.18/ollama/v1
 ARG VITE_MODEL_NAME=gpt-oss:20b
 
 # Set environment variables
