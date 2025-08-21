@@ -570,14 +570,43 @@ Based on the search results above, provide a comprehensive answer to the user's 
 
           // Send all tool results back to AI for processing
           try {
-            const followUpCompletion = await openai.current.chat.completions.create({
-              model: model,
-              messages: [
-                { role: 'system', content: systemPrompt + "\n\n🚨 CRITICAL INSTRUCTION: You have already searched the documentation. The search results are provided above. You MUST provide your final answer NOW in Vietnamese with HTML formatting. DO NOT call any tools. DO NOT make any more tool_calls. DO NOT search again. Just answer the user's question based on the search results provided. This is your FINAL response." },
-                ...conversationHistory,
-                assistantResponse,
-                ...toolResponses  // Send all tool responses
-              ],
+                         // Create a more explicit follow-up prompt with search results
+             const searchResultsText = toolResponses.map(response => {
+               try {
+                 const data = JSON.parse(response.content);
+                 return data.results.map(result => 
+                   `TITLE: ${result.title}\nURL: ${result.url}\nCONTENT: ${result.content}`
+                 ).join('\n\n');
+               } catch (e) {
+                 return response.content;
+               }
+             }).join('\n\n');
+
+             const followUpPrompt = `${systemPrompt}
+
+🚨 CRITICAL INSTRUCTION - FINAL RESPONSE REQUIRED:
+You have already searched the documentation. Below are the search results you found:
+
+${searchResultsText}
+
+NOW YOU MUST:
+1. Read the search results above carefully
+2. Provide your final answer in Vietnamese with HTML formatting
+3. DO NOT call any tools
+4. DO NOT search again
+5. DO NOT make any more tool_calls
+6. Just answer the user's question based on the search results provided
+
+This is your FINAL response. No more searching.`;
+
+             const followUpCompletion = await openai.current.chat.completions.create({
+               model: model,
+               messages: [
+                 { role: 'system', content: followUpPrompt },
+                 ...conversationHistory,
+                 assistantResponse,
+                 ...toolResponses  // Send all tool responses
+               ],
               // NO tools in follow-up to force final answer
               temperature: 0.3, // Lower temperature for more focused responses
               max_tokens: 2000
@@ -594,28 +623,39 @@ Based on the search results above, provide a comprehensive answer to the user's 
             console.log("Has tool_calls:", !!finalResponse.tool_calls);
             console.log("Content:", finalResponse.content);
 
-            // Check if follow-up still has tool_calls (shouldn't happen but handle it)
-            if (finalResponse.tool_calls && finalResponse.tool_calls.length > 0) {
-              console.warn("⚠️ Follow-up still has tool_calls, this shouldn't happen. Using fallback response.");
-              
-              // Try to extract any content from the response before tool_calls
-              let fallbackContent = "Xin lỗi, tôi đang gặp vấn đề kỹ thuật trong việc xử lý câu hỏi của bạn. Vui lòng thử lại hoặc đặt câu hỏi khác.";
-              
-              if (finalResponse.content && finalResponse.content.trim()) {
-                // If there's some content, use it but add a warning
-                fallbackContent = finalResponse.content + "\n\n<i>Lưu ý: Câu trả lời này có thể chưa hoàn chỉnh do lỗi kỹ thuật.</i>";
-              }
-              
-              // Create a fallback response
-              const assistantMessage = {
-                id: Date.now() + 1,
-                type: 'assistant',
-                content: fallbackContent,
-                timestamp: new Date(),
-                isHtml: true
-              };
-              setMessages(prevMessages => [...prevMessages, assistantMessage]);
-            } else {
+                         // Check if follow-up still has tool_calls (shouldn't happen but handle it)
+             if (finalResponse.tool_calls && finalResponse.tool_calls.length > 0) {
+               console.warn("⚠️ Follow-up still has tool_calls, this shouldn't happen. Using fallback response.");
+               
+               // Try to extract any content from the response before tool_calls
+               let fallbackContent = "Xin lỗi, tôi đang gặp vấn đề kỹ thuật trong việc xử lý câu hỏi của bạn. Vui lòng thử lại hoặc đặt câu hỏi khác.";
+               
+               if (finalResponse.content && finalResponse.content.trim()) {
+                 // If there's some content, use it but add a warning
+                 fallbackContent = finalResponse.content + "\n\n<i>Lưu ý: Câu trả lời này có thể chưa hoàn chỉnh do lỗi kỹ thuật.</i>";
+               } else {
+                 // If no content, try to create a response from search results
+                 try {
+                   const searchData = JSON.parse(toolResponses[0].content);
+                   if (searchData.results && searchData.results.length > 0) {
+                     const result = searchData.results[0];
+                     fallbackContent = `<b>Thông tin từ tài liệu:</b><br/><br/>${result.content}<br/><br/><i>Nguồn: <a href="${result.url}" target="_blank">${result.title}</a></i>`;
+                   }
+                 } catch (e) {
+                   console.error("Error parsing search results for fallback:", e);
+                 }
+               }
+               
+               // Create a fallback response
+               const assistantMessage = {
+                 id: Date.now() + 1,
+                 type: 'assistant',
+                 content: fallbackContent,
+                 timestamp: new Date(),
+                 isHtml: true
+               };
+               setMessages(prevMessages => [...prevMessages, assistantMessage]);
+             } else {
               // Normal response
               const assistantMessage = {
                 id: Date.now() + 1,
