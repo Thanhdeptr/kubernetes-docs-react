@@ -573,13 +573,13 @@ Based on the search results above, provide a comprehensive answer to the user's 
             const followUpCompletion = await openai.current.chat.completions.create({
               model: model,
               messages: [
-                { role: 'system', content: systemPrompt + "\n\nCRITICAL: You have already searched the documentation. Based on the search results provided above, give your final answer in Vietnamese with HTML formatting. DO NOT call custom_websearch or any other tools. Just provide the answer directly." },
+                { role: 'system', content: systemPrompt + "\n\n🚨 CRITICAL INSTRUCTION: You have already searched the documentation. The search results are provided above. You MUST provide your final answer NOW in Vietnamese with HTML formatting. DO NOT call any tools. DO NOT make any more tool_calls. DO NOT search again. Just answer the user's question based on the search results provided. This is your FINAL response." },
                 ...conversationHistory,
                 assistantResponse,
                 ...toolResponses  // Send all tool responses
               ],
               // NO tools in follow-up to force final answer
-              temperature: 0.7,
+              temperature: 0.3, // Lower temperature for more focused responses
               max_tokens: 2000
             });
 
@@ -598,13 +598,21 @@ Based on the search results above, provide a comprehensive answer to the user's 
             if (finalResponse.tool_calls && finalResponse.tool_calls.length > 0) {
               console.warn("⚠️ Follow-up still has tool_calls, this shouldn't happen. Using fallback response.");
               
+              // Try to extract any content from the response before tool_calls
+              let fallbackContent = "Xin lỗi, tôi đang gặp vấn đề kỹ thuật trong việc xử lý câu hỏi của bạn. Vui lòng thử lại hoặc đặt câu hỏi khác.";
+              
+              if (finalResponse.content && finalResponse.content.trim()) {
+                // If there's some content, use it but add a warning
+                fallbackContent = finalResponse.content + "\n\n<i>Lưu ý: Câu trả lời này có thể chưa hoàn chỉnh do lỗi kỹ thuật.</i>";
+              }
+              
               // Create a fallback response
               const assistantMessage = {
                 id: Date.now() + 1,
                 type: 'assistant',
-                content: "Xin lỗi, tôi đang gặp vấn đề kỹ thuật trong việc xử lý câu hỏi của bạn. Vui lòng thử lại hoặc đặt câu hỏi khác.",
+                content: fallbackContent,
                 timestamp: new Date(),
-                isHtml: false
+                isHtml: true
               };
               setMessages(prevMessages => [...prevMessages, assistantMessage]);
             } else {
