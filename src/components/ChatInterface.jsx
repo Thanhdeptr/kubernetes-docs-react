@@ -466,23 +466,30 @@ Always answer based on accurate information from the documentation and respond i
         let completion;
         let useTools = true;
         
-        try {
-          completion = await openai.current.chat.completions.create({
-            model: model,
-            messages: [
-              { role: 'system', content: systemPrompt },
-              ...conversationHistory
-            ],
-            tools: tools, // Use defined tools
-            tool_choice: {
-              "type": "function",
-              "function": {"name": "custom_websearch"}
-            }, // Force using custom_websearch tool
-            extra_headers: {
-              "HTTP-Referer": window.location.href,
-              "X-Title": "Kubernetes Documentation Assistant"
-            }
-          });
+                 try {
+           // Add timeout for API calls
+           const timeoutPromise = new Promise((_, reject) => 
+             setTimeout(() => reject(new Error('Request timeout after 120 seconds')), 120000)
+           );
+           
+           const apiPromise = openai.current.chat.completions.create({
+             model: model,
+             messages: [
+               { role: 'system', content: systemPrompt },
+               ...conversationHistory
+             ],
+             tools: tools, // Use defined tools
+             tool_choice: {
+               "type": "function",
+               "function": {"name": "custom_websearch"}
+             }, // Force using custom_websearch tool
+             extra_headers: {
+               "HTTP-Referer": window.location.href,
+               "X-Title": "Kubernetes Documentation Assistant"
+             }
+           });
+           
+           completion = await Promise.race([apiPromise, timeoutPromise]);
         } catch (toolError) {
           console.log("Tool calling not supported, manually executing search:", toolError);
           useTools = false;
@@ -599,18 +606,25 @@ INSTRUCTIONS:
 
 This is your FINAL response. No more searching.`;
 
-             const followUpCompletion = await openai.current.chat.completions.create({
-               model: model,
-               messages: [
-                 { role: 'system', content: followUpPrompt },
-                 ...conversationHistory,
-                 assistantResponse,
-                 ...toolResponses
-               ],
-               // NO tools parameter to prevent tool calling
-               temperature: 0.1, // Very low temperature for deterministic responses
-               max_tokens: 2000
-             });
+                           // Add timeout for follow-up API call
+              const followUpTimeoutPromise = new Promise((_, reject) => 
+                setTimeout(() => reject(new Error('Follow-up request timeout after 120 seconds')), 120000)
+              );
+              
+              const followUpApiPromise = openai.current.chat.completions.create({
+                model: model,
+                messages: [
+                  { role: 'system', content: followUpPrompt },
+                  ...conversationHistory,
+                  assistantResponse,
+                  ...toolResponses
+                ],
+                // NO tools parameter to prevent tool calling
+                temperature: 0.1, // Very low temperature for deterministic responses
+                max_tokens: 2000
+              });
+              
+              const followUpCompletion = await Promise.race([followUpApiPromise, followUpTimeoutPromise]);
 
              // Log result from API after sending tool results
              console.log("=== FOLLOW-UP RESPONSE WITH TOOL RESULTS ===");
