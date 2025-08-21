@@ -568,9 +568,9 @@ Based on the search results above, provide a comprehensive answer to the user's 
             }
           }
 
-          // Send all tool results back to AI for processing
-          try {
-                         // Create a more explicit follow-up prompt with search results
+           // Send all tool results back to AI for processing with STRONG PROTECTION
+           try {
+             // Create a very explicit follow-up prompt with search results
              const searchResultsText = toolResponses.map(response => {
                try {
                  const data = JSON.parse(response.content);
@@ -582,15 +582,15 @@ Based on the search results above, provide a comprehensive answer to the user's 
                }
              }).join('\n\n');
 
-             const followUpPrompt = `${systemPrompt}
+             const followUpPrompt = `You are a Kubernetes Documentation Assistant. You have already searched the documentation.
 
-🚨 CRITICAL INSTRUCTION - FINAL RESPONSE REQUIRED:
-You have already searched the documentation. Below are the search results you found:
+🚨 FINAL RESPONSE REQUIRED - NO MORE TOOLS:
+Below are the search results you found:
 
 ${searchResultsText}
 
-NOW YOU MUST:
-1. Read the search results above carefully
+INSTRUCTIONS:
+1. Read the search results above
 2. Provide your final answer in Vietnamese with HTML formatting
 3. DO NOT call any tools
 4. DO NOT search again
@@ -605,25 +605,25 @@ This is your FINAL response. No more searching.`;
                  { role: 'system', content: followUpPrompt },
                  ...conversationHistory,
                  assistantResponse,
-                 ...toolResponses  // Send all tool responses
+                 ...toolResponses
                ],
-              // NO tools in follow-up to force final answer
-              temperature: 0.3, // Lower temperature for more focused responses
-              max_tokens: 2000
-            });
+               // NO tools parameter to prevent tool calling
+               temperature: 0.1, // Very low temperature for deterministic responses
+               max_tokens: 2000
+             });
 
-            // Log result from API after sending tool results
-            console.log("=== FOLLOW-UP RESPONSE WITH TOOL RESULTS ===");
-            console.log(JSON.stringify(followUpCompletion, null, 2));
+             // Log result from API after sending tool results
+             console.log("=== FOLLOW-UP RESPONSE WITH TOOL RESULTS ===");
+             console.log(JSON.stringify(followUpCompletion, null, 2));
 
-            // Update response from AI
-            const finalResponse = followUpCompletion.choices[0].message;
-            
-            console.log("=== CHECKING FOLLOW-UP FOR TOOL CALLS ===");
-            console.log("Has tool_calls:", !!finalResponse.tool_calls);
-            console.log("Content:", finalResponse.content);
+             // Update response from AI
+             const finalResponse = followUpCompletion.choices[0].message;
+             
+             console.log("=== CHECKING FOLLOW-UP FOR TOOL CALLS ===");
+             console.log("Has tool_calls:", !!finalResponse.tool_calls);
+             console.log("Content:", finalResponse.content);
 
-                         // Check if follow-up still has tool_calls (shouldn't happen but handle it)
+             // Check if follow-up still has tool_calls (shouldn't happen but handle it)
              if (finalResponse.tool_calls && finalResponse.tool_calls.length > 0) {
                console.warn("⚠️ Follow-up still has tool_calls, this shouldn't happen. Using fallback response.");
                
@@ -656,26 +656,26 @@ This is your FINAL response. No more searching.`;
                };
                setMessages(prevMessages => [...prevMessages, assistantMessage]);
              } else {
-              // Normal response
-              const assistantMessage = {
-                id: Date.now() + 1,
-                type: 'assistant',
-                content: finalResponse.content || "Xin lỗi, tôi không thể tạo ra câu trả lời. Vui lòng thử lại.",
-                timestamp: new Date(),
-                isHtml: true  // Flag to indicate HTML content
-              };
-              setMessages(prevMessages => [...prevMessages, assistantMessage]);
-            }
-          } catch (error) {
-            console.error("Error in follow-up API call:", error);
-            const assistantMessage = {
-              id: Date.now() + 1,
-              type: 'assistant',
-              content: "Đã xảy ra lỗi khi xử lý yêu cầu của bạn: " + error.message,
-              timestamp: new Date()
-            };
-            setMessages(prevMessages => [...prevMessages, assistantMessage]);
-          }
+               // Normal response
+               const assistantMessage = {
+                 id: Date.now() + 1,
+                 type: 'assistant',
+                 content: finalResponse.content || "Xin lỗi, tôi không thể tạo ra câu trả lời. Vui lòng thử lại.",
+                 timestamp: new Date(),
+                 isHtml: true  // Flag to indicate HTML content
+               };
+               setMessages(prevMessages => [...prevMessages, assistantMessage]);
+             }
+           } catch (error) {
+             console.error("Error in follow-up API call:", error);
+             const assistantMessage = {
+               id: Date.now() + 1,
+               type: 'assistant',
+               content: "Đã xảy ra lỗi khi xử lý yêu cầu của bạn: " + error.message,
+               timestamp: new Date()
+             };
+             setMessages(prevMessages => [...prevMessages, assistantMessage]);
+           }
         } else {
           // No tool calls detected (this should only happen if tools aren't supported)
           // The response should already include search results from enhanced prompt
